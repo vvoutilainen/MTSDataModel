@@ -9,4 +9,4 @@
  - Tested on
     - anaconda build py35_0, date 2016-03-14
     - conda 4.5.11
-    - python 3.xxx
+    - python 3.6.7
