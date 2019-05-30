@@ -1,0 +1,3 @@
+GDP: OECD Economic Outlook
+Inflation: BIS Long Inflation Series
+StockPrices: OECD Main Economic Indicators

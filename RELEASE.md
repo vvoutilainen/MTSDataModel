@@ -1,0 +1,12 @@
+# Release 0.1.0
+ - Initial release of preliminary project. Very much work in progress.
+ - Includes following pre-processing and/ or feature engineering methods:
+    - DeflateVariables()
+    - DetrendVariables()
+    - MRADecomposition()
+    - SumVariables()
+    - ReduceVariableDimension()
+ - Tested on
+    - anaconda build py35_0, date 2016-03-14
+    - conda 4.5.11
+    - python 3.xxx
