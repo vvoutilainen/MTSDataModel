@@ -167,9 +167,9 @@ class MTSDataModel:
         Get given series from frame
         """
         if entities == None:
-            return self.df.iloc[:, self.df.columns.get_level_values(0).isin(variables)]
+            return self.df.iloc[:, self.df.columns.get_level_values(0).isin(variables)].copy()
         else:
-            return self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1).isin(entities))]
+            return self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1).isin(entities))].copy()
 
     def DropVariables(self, variables, entities=None):
         """
