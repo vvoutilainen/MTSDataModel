@@ -201,7 +201,12 @@ class MTSDataModel:
             # append current entity to entities
             if set(variables).issubset(list(self.df.iloc[:, self.df.columns.get_level_values(1).isin([crtentity])].columns.get_level_values(0))):
                 entities.append(crtentity)
-        return entities
+
+        # If no entities found, this means no variables found. Return error.
+        if len(entities) == 0:
+            raise MyException("EntitiesDefault: No variables present for " + entity + ".") 
+        else:
+            return entities        
 
     def VariablesCheck(self,variables,entities):
         """Helper function to check chosen variables exist for chosen entities."""
