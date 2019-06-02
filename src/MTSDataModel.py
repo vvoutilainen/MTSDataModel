@@ -152,6 +152,9 @@ class MTSDataModel:
     # Methods
     ##############################################################
 
+    ####################
+    # Meta methods
+    ####################
     def ReturnDf(self):
         """Return df."""
         return self.df.copy()
@@ -179,8 +182,37 @@ class MTSDataModel:
             self.df.drop(variables, axis=1, level=0, inplace=True)
         else:
             from itertools import product as iterprod
-            self.df.drop(list(iterprod(variables, entities)), axis=1, inplace=True)        
+            self.df.drop(list(iterprod(variables, entities)), axis=1, inplace=True)
 
+    ####################
+    # Check methods
+    ####################
+    def EntitiesDefault(self,variables):
+        """
+        Helper function to extract entities for which 
+        all chosen variables exist.
+        """
+        entities = []
+        # All possible entities
+        all_entities = list(np.unique(self.df.columns.get_level_values(1).values))
+        # Loop over all_entities
+        for crtentity in all_entities:
+            # If variables belong to list of all variables under current entity,
+            # append current entity to entities
+            if set(variables).issubset(list(self.df.iloc[:, self.df.columns.get_level_values(1).isin([crtentity])].columns.get_level_values(0))):
+                entities.append(crtentity)
+        return entities
+
+    def VariablesCheck(self,variables,entities):
+        """Helper function to check chosen variables exist for chosen entities."""
+        for entity in entities:
+            frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1) == entity)].copy()       
+            if set(variables).issubset(frame.columns.get_level_values(0)) == False:
+                raise MyException("Not all variables present for " + entity + ".")            
+
+    ####################
+    # Operation methods
+    ####################
     def DeflateVariables(self, variables, entities=None, infvar = 'Inflation'):
         """
         For selected 1st level variables and 2nd level entities, deflate chosen
@@ -314,27 +346,24 @@ class MTSDataModel:
                 else:
                     raise MyException("Invalid selection for argument expanding.")
                                 
-    def SumVariables(self,variables,entities=None):
+    def SumVariables(self,variables,name,entities=None):
         """
         Aggregate given variables, under same entity, using simple sum.
 
         variables is a dict with key being new variable name and value designating
         variables to be summed together.
         """
-        for key in variables:
+        # If no entities selected, get those for which all given variables exists
+        if entities == None:
+            entities = self.EntitiesDefault(variables)
+        # If entities selected, check that all variables exist for them
+        else:
+            self.VariablesCheck(variables,entities)
 
-            if entities == None:
-                # If no entities selected, get those for which all given variables exists
-                entities = []
-                all_entities = list(np.unique(self.df.columns.get_level_values(1).values))
-                for crtentity in all_entities:
-                    if set(variables[key]).issubset(list(self.df.iloc[:, self.df.columns.get_level_values(1).isin([crtentity])].columns.get_level_values(0))):
-                        entities.append(crtentity)
-
-            for entity in entities:
-                crt_frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables[key])) & (self.df.columns.get_level_values(1) == entity)]
-                crt_frame[key, entity] = crt_frame.sum(axis=1,skipna = False)
-                self.df = pd.merge(self.df, crt_frame[key, entity], left_index = True, right_index = True, how = 'left')
+        for entity in entities:
+            crt_frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1) == entity)]
+            crt_frame[name, entity] = crt_frame.sum(axis=1,skipna = False)
+            self.df = pd.merge(self.df, crt_frame[name, entity], left_index = True, right_index = True, how = 'left')
 
     def ReduceVariableDimension(self, suffix, variables, entities=None, type='pca'):
         """
