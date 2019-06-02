@@ -272,13 +272,14 @@ class MTSDataModel:
                 counter += 1 
             self.df = pd.merge(self.df, final_frame, left_index = True, right_index = True, how = 'left')
             
-    def DetrendVariables(self, variables, difftype = 'ld', entities=None):
+    def DetrendVariables(self, variables, dttype = 'ld1', entities=None):
         """
-        Det-trend chosen variables. De-trending options (difftype) are:
-          - ld: 1st log-differences
-          - d : 1st difference
+        Det-trend chosen variables. De-trending options (dttype) are:
+          - ldN: Nth log-differences
+          - sdN: Nth difference
+          - lg : simple natural logs
         
-        Appends de-trended series to data frame with suffix depending on difftype.
+        Appends de-trended series to data frame with suffix depending on dttype.
         """
         # If no entities selected, get those for which all given variables exists
         if entities == None:
@@ -288,14 +289,17 @@ class MTSDataModel:
             self.VariablesCheck(variables,entities)
 
         for seriestodt in variables:    
-            crt_frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin([seriestodt])) & (self.df.columns.get_level_values(1).isin(entities))]
-            if difftype == 'ld':
-                crt_frame = np.log(crt_frame).diff()
-            elif difftype == 'd':
-                crt_frame = crt_frame.diff()
+            crt_frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin([seriestodt])) & (self.df.columns.get_level_values(1).isin(entities))].copy()
+            if dttype[:2] == 'ld':
+                crt_frame = np.log(crt_frame).diff(int(dttype[2:3]))
+            elif dttype[:2] == 'sd':
+                crt_frame = crt_frame.diff(int(dttype[2:3]))
+            elif dttype[:2] == 'lg':
+                crt_frame = np.log(crt_frame)
             else:
-                raise MyException("Invalid difftype selected.")
-            crt_frame.rename(columns={seriestodt:seriestodt+"_"+difftype+"1"}, inplace=True, level = 0)
+                raise MyException("Invalid dttype selected.")
+
+            crt_frame.rename(columns={seriestodt:seriestodt+"_"+dttype}, inplace=True, level = 0)
             self.df = pd.merge(self.df, crt_frame, left_index = True, right_index = True, how = 'left')
         
     def MRADecomposition(self, variables, entities=None, levels=6, filter='la8', minobsamount=40, expanding='none'):
