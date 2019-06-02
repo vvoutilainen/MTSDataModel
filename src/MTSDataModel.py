@@ -213,7 +213,7 @@ class MTSDataModel:
         for entity in entities:
             frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1) == entity)].copy()       
             if set(variables).issubset(frame.columns.get_level_values(0)) == False:
-                raise MyException("Not all variables present for " + entity + ".")            
+                raise MyException("VariablesCheck: Not all required variables present for " + entity + ".")            
 
     ####################
     # Operation methods
@@ -228,9 +228,18 @@ class MTSDataModel:
 
         Adds deflated series into df with suffix '_def'.
         """
+
+        # If no entities selected, get those for which all given variables exists
+        if entities == None:
+            entities = self.EntitiesDefault(variables)
+        # If entities selected, check that all variables exist for them
+        else:
+            self.VariablesCheck(variables,entities)
+
+        # Check that inflation variable exists for entities
+        self.VariablesCheck([infvar],entities)
+
         for seriestodefl in variables:
-            if entities == None:
-                entities = list(np.unique(self.df.columns.get_level_values(1).values))          
             counter = 0
             for entity in entities:
 
