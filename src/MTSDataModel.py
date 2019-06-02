@@ -169,20 +169,29 @@ class MTSDataModel:
         """
         Get given series from frame
         """
+        # If no entities selected, get those for which all given variables exists
         if entities == None:
-            return self.df.iloc[:, self.df.columns.get_level_values(0).isin(variables)].copy()
+            entities = self.EntitiesDefault(variables)
+        # If entities selected, check that all variables exist for them
         else:
-            return self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1).isin(entities))].copy()
+            self.VariablesCheck(variables,entities)
+
+        return self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1).isin(entities))].copy()
 
     def DropVariables(self, variables, entities=None):
         """
         Drop variables from frame in-place.
         """
-        if entities == None: 
-            self.df.drop(variables, axis=1, level=0, inplace=True)
+
+        # If no entities selected, get those for which all given variables exists
+        if entities == None:
+            entities = self.EntitiesDefault(variables)
+        # If entities selected, check that all variables exist for them
         else:
-            from itertools import product as iterprod
-            self.df.drop(list(iterprod(variables, entities)), axis=1, inplace=True)
+            self.VariablesCheck(variables,entities)
+
+        from itertools import product as iterprod
+        self.df.drop(list(iterprod(variables, entities)), axis=1, inplace=True)
 
     ####################
     # Check methods
@@ -204,7 +213,7 @@ class MTSDataModel:
 
         # If no entities found, this means no variables found. Return error.
         if len(entities) == 0:
-            raise MyException("EntitiesDefault: No variables present for " + entity + ".") 
+            raise MyException("EntitiesDefault: Not all variables present for given entities list.") 
         else:
             return entities        
 
@@ -271,10 +280,14 @@ class MTSDataModel:
         
         Appends de-trended series to data frame with suffix depending on difftype.
         """
+        # If no entities selected, get those for which all given variables exists
+        if entities == None:
+            entities = self.EntitiesDefault(variables)
+        # If entities selected, check that all variables exist for them
+        else:
+            self.VariablesCheck(variables,entities)
+
         for seriestodt in variables:    
-            if entities == None:
-                entities = list(np.unique(self.df.columns.get_level_values(1).values))
-            # If seriestodt not in frame, should throw error when differencing
             crt_frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin([seriestodt])) & (self.df.columns.get_level_values(1).isin(entities))]
             if difftype == 'ld':
                 crt_frame = np.log(crt_frame).diff()
@@ -304,18 +317,17 @@ class MTSDataModel:
         data frame corresponding to MODWT MRA details and smooth.
         """
         
+        # If no entities selected, get those for which all given variables exists
+        if entities == None:
+            entities = self.EntitiesDefault(variables)
+        # If entities selected, check that all variables exist for them
+        else:
+            self.VariablesCheck(variables,entities)        
+
         # Get R wavelet functions
         wvltpackage = self.ConstructWvltFunctions()
 
-        # Select entities
-        if entities == None:
-                entities = list(set([x[1] for x in self.df.columns.get_values()]))
-
-        for entity in entities:
-            # Select variables
-            if variables == None:
-                variables = [x[0] for x in self.df.columns.get_values() if x[1] == entity]
-            
+        for entity in entities:            
             # Select variables under given entity into frame
             frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1)==entity)]
             
@@ -384,15 +396,18 @@ class MTSDataModel:
         Applies dimension reduction to reduce given N variables into
         one-dimensional variable. Currently only PCA available.
         """
+
+        # If no entities selected, get those for which all given variables exists
         if entities == None:
-            entities = list(np.unique(self.df.columns.get_level_values(1).values))
+            entities = self.EntitiesDefault(variables)
+        # If entities selected, check that all variables exist for them
+        else:
+            self.VariablesCheck(variables,entities)
 
         for entity in entities:
             frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1)==entity)]
             frame = frame.dropna(axis = 0, how = 'any')
-            # Check that all variables are included for given entity
-            if set(variables).issubset(frame.columns.get_level_values(0)) == False:
-                raise MyException("Not all variables present for " + entity + ".")       
+
             if type == 'pca':
                 from sklearn.decomposition import PCA
                 dimreductor = PCA(n_components = 1)

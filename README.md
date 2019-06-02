@@ -38,6 +38,12 @@ MTSDataModel initilizes to a data frame with two-leveled multi-index columns. Fi
 
 Several data manipulation operation can be performed on the initialized data frame within MTSDataModel object. These operations can be performed on different variables and/or entities.
 
+### Variables and entities selection
+
+Data manipulations are performed via class methods. For this level 1 names (variables) need be specified and passed into methods via list *variables*. When it comes to level 2 names (entities), following rules are followed:
+ - **Implicit entities selection**: when list *entities* is left unspecified, then methods operate *only on entities for which all input variables are present*.
+ - **Explicit entities selection**: when list *entities* is explicitly specified, then methods operate *only on variable/entity pairs (cross-product of the two input lists) specified*. If some variable/entity pair is not present in data an error will be thrown.
+
 ### Data pre-processing
 
 Methods available for pre-processing of data are
