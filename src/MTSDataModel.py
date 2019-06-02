@@ -114,17 +114,16 @@ class MTSDataModel:
     def MRADecompose(frame,entity,var,wvltpckg,levels,filter):
         """Function for MRA decomposition"""
         from rpy2.robjects import pandas2ri
-        # Frame with single variable. If crtseires is not in frame, should throw error later
-        crtframe = frame.iloc[:, (frame.columns.get_level_values(0).isin([var])) & (frame.columns.get_level_values(1)==entity)]
+        frame = frame.iloc[:, (frame.columns.get_level_values(0).isin([var])) & (frame.columns.get_level_values(1)==entity)]
         # Truncate NAs from single variable, needed for mra function to run as it cannot
         # handle NA values
-        crtframe = crtframe.dropna(axis = 0, how = 'any')
+        frame = frame.dropna(axis = 0, how = 'any')
         # Apply wavelet mra
         pandas2ri.activate()
-        mraseries = wvltpckg.WaveletMRA(crtframe,levels=levels, filter=filter)
+        mraseries = wvltpckg.WaveletMRA(frame,levels=levels, filter=filter)
         mraseries = pandas2ri.ri2py_dataframe(mraseries)
         mraseries.columns = [var+'_'+x for x in mraseries.columns]
-        mraseries.index = crtframe.index
+        mraseries.index = frame.index
         # Modify to multi-columned
         mraseries.columns = pd.MultiIndex.from_tuples(list(zip(mraseries.columns,[entity]*len(mraseries.columns))))              
         return mraseries
@@ -196,18 +195,31 @@ class MTSDataModel:
     def FilterApply(self,variables,entities,ffun,expanding,minobsamount,faKwargs):
         """
         Wrapper method to apply different filter calculations.
-        """
 
+        variables   : List of variable names to be filtered. If multiple variable names,
+                      variables under same entity will be trubcated to same length before filtering.
+        entities    : List of entity names.
+        ffun        : Filter method/functions.
+        expanding   : == 'none' (default), calculates decomposition on full sample
+                      == 'expanding', calculates decomposition on expanding sample and stores expanding series
+                      == 'redfull', calculates decomposition on expanding sample and stores reduced full series
+                      == 'both', calculates decomposition on expanding sample stores both expanding and reduced full series
+        minobsamount: Int, minumum amount of observations in sample. If number of observations less than minobsamount,
+                      then no filtering will be performed. In expanding sample calculations uses  minobsamount observations
+                      in pre-sample.
+        faKwargs    : dict of inputs for ffun
+
+        """
         for entity in entities:            
             # Select variables under given entity into frame
-            frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1)==entity)]
+            frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1)==entity)].copy()
             
             # Truncate NAs (if any) for all variables under given entity, both from start and end
             frame = frame.dropna(axis = 0, how = 'any')
             
             # Check that we have at least minobsamount observations in full sample. If not, skip entity.
             if len(frame) < minobsamount:
-                print("For entity {} number of observations {} less than minobsamount = {}.\nNo MRA decomposition performed!\n-------"
+                print("For entity {} number of observations {} less than minobsamount = {}.\nNo filtering performed!\n-------"
                     .format(entity, len(frame),minobsamount))
                 continue
             
@@ -353,18 +365,7 @@ class MTSDataModel:
         
     def MRADecomposition(self, variables, entities=None, levels=6, filter='la8', minobsamount=40, expanding='none'):
         """
-        Wavelet multi-resolution decomposition of given variables, either on
-        full or expanding sample. If 
-            - expanding == 'none' (default), calculates decomposition on full sample
-            - expanding == 'expanding', calculates decomposition on expanding sample and stores expanding series
-            - expanding == 'redfull', calculates decomposition on expanding sample and stores reduced full series
-            - expanding == 'both', calculates decomposition on expanding sample stores both expanding and reduced full series
-            
-        In expanding sample calculations uses  minobsamount observations in pre-sample.
-
-        If multiple variables passed in, all variables belonging to
-        same entity will be trubcated to same length before estimating 
-        wavelet MRA components.
+        Wavelet multi-resolution decomposition of given variables.
 
         For each variable/entity/sample end date combination, appends level + 1 new variables to
         data frame corresponding to MODWT MRA details and smooth.
