@@ -63,7 +63,7 @@ class MTSDataModel:
         return wvltpackage
             
     @staticmethod
-    def ExpandingSampleCalc(fun,frame,minobsamount,**kwargs):
+    def ExpandingSampleCalc(fun,frame,minobsamount,escKwargDict):
         """
         Function designed to perform calculations on "exapnding" sample. This means that,
         given pre-sample, we increment variable one obseravtion at the time and re-calculate
@@ -85,8 +85,8 @@ class MTSDataModel:
             # Get crt frame
             crtframe = frame[frame.index <= d].copy()
 
-            # Apply chosen calculation function to expanding sample
-            crtresultframe = fun(crtframe, **kwargs)
+            # Apply chosen calculation function to expanding sample            
+            crtresultframe = fun(crtframe, **escKwargDict)
             
             # Append suffix "_exp" for expanding variables
             crtresultframe.columns = pd.MultiIndex.from_tuples([(x[0]+"_exp", x[1]) for x in crtresultframe.columns])
@@ -193,6 +193,55 @@ class MTSDataModel:
         from itertools import product as iterprod
         self.df.drop(list(iterprod(variables, entities)), axis=1, inplace=True)
 
+    def FilterApply(self,variables,entities,ffun,expanding,minobsamount,faKwargs):
+        """
+        Wrapper method to apply different filter calculations.
+        """
+
+        for entity in entities:            
+            # Select variables under given entity into frame
+            frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1)==entity)]
+            
+            # Truncate NAs (if any) for all variables under given entity, both from start and end
+            frame = frame.dropna(axis = 0, how = 'any')
+            
+            # Check that we have at least minobsamount observations in full sample. If not, skip entity.
+            if len(frame) < minobsamount:
+                print("For entity {} number of observations {} less than minobsamount = {}.\nNo MRA decomposition performed!\n-------"
+                    .format(entity, len(frame),minobsamount))
+                continue
+            
+            # Loop over variables
+            for var in variables:
+                escKwargDict = faKwargs.copy()
+                escKwargDict['entity'] = entity; escKwargDict['var'] = var 
+
+                # If decomposition on using full sample
+                if expanding=='none':
+                    # Apply MRA decomposition per each variable
+                    resultframe = self.MRADecompose(frame,**escKwargDict)
+                    self.df = pd.merge(self.df, resultframe, left_index = True, right_index = True, how = 'left')
+                # If decomposition using expanding sample, storing only expanding
+                elif expanding=='expanding':
+                    # Apply MRA decomposition to expanding sample per each variable
+                    resultframe,_ = self.ExpandingSampleCalc(self.MRADecompose, frame, minobsamount,escKwargDict)
+                    self.df = pd.merge(self.df, resultframe, left_index = True, right_index = True, how = 'left')
+                # If decomposition using expanding sample, storing only reduced full samples
+                elif expanding=='redfull':
+                    # Apply MRA decomposition to expanding sample per each variable
+                    _,resultframe = self.ExpandingSampleCalc(self.MRADecompose, frame, minobsamount,escKwargDict)
+                    self.df = pd.merge(self.df, resultframe, left_index = True, right_index = True, how = 'left')
+
+                # If decomposition using expanding sample, storing both expanding and reduced full samples
+                elif expanding=='both':
+                    # Apply MRA decomposition to expanding sample per each variable
+                    resultframeexp,resultframefull = self.ExpandingSampleCalc(self.MRADecompose, frame, minobsamount,escKwargDict)
+                    self.df = pd.merge(self.df, resultframeexp,  left_index = True, right_index = True, how = 'left')
+                    self.df = pd.merge(self.df, resultframefull, left_index = True, right_index = True, how = 'left')
+                # else throw error
+                else:
+                    raise MyException("FilterApply: Invalid selection for argument expanding.")        
+
     ####################
     # Check methods
     ####################
@@ -274,12 +323,12 @@ class MTSDataModel:
             
     def DetrendVariables(self, variables, dttype = 'ld1', entities=None):
         """
-        Det-trend chosen variables. De-trending options (dttype) are:
+        Collection of de-trending operations. Options (dttype) are:
           - ldN: Nth log-differences
           - sdN: Nth difference
           - lg : simple natural logs
         
-        Appends de-trended series to data frame with suffix depending on dttype.
+        Appends de-trended series to data frame with suffix dttype.
         """
         # If no entities selected, get those for which all given variables exists
         if entities == None:
@@ -331,51 +380,10 @@ class MTSDataModel:
         # Get R wavelet functions
         wvltpackage = self.ConstructWvltFunctions()
 
-        for entity in entities:            
-            # Select variables under given entity into frame
-            frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1)==entity)]
-            
-            # Truncate NAs (if any) for all variables under given entity, both from start and end
-            frame = frame.dropna(axis = 0, how = 'any')
-            
-            # Check that we have at least minobsamount observations in full sample. If not, skip entity.
-            if len(frame) < minobsamount:
-                print("For entity {} number of observations {} less than minobsamount = {}.\nNo MRA decomposition performed!\n-------"
-                    .format(entity, len(frame),minobsamount))
-                continue
-            
-            # Loop over variables
-            for var in variables:
-
-                # If decomposition on using full sample
-                if expanding=='none':
-                    # Apply MRA decomposition per each variable
-                    resultframe = self.MRADecompose(frame,entity,var,wvltpackage,levels,filter)
-                    self.df = pd.merge(self.df, resultframe, left_index = True, right_index = True, how = 'left')
-                # If decomposition using expanding sample, storing only expanding
-                elif expanding=='expanding':
-                    # Apply MRA decomposition to expanding sample per each variable
-                    resultframe,_ = self.ExpandingSampleCalc(self.MRADecompose, frame, minobsamount,
-                                                              entity=entity, var=var, wvltpckg=wvltpackage, levels=levels,filter=filter)
-                    self.df = pd.merge(self.df, resultframe, left_index = True, right_index = True, how = 'left')
-                # If decomposition using expanding sample, storing only reduced full samples
-                elif expanding=='redfull':
-                    # Apply MRA decomposition to expanding sample per each variable
-                    _,resultframe = self.ExpandingSampleCalc(self.MRADecompose, frame, minobsamount,
-                                                              entity=entity, var=var, wvltpckg=wvltpackage, levels=levels,filter=filter)
-                    self.df = pd.merge(self.df, resultframe, left_index = True, right_index = True, how = 'left')
-
-                # If decomposition using expanding sample, storing both expanding and reduced full samples
-                elif expanding=='both':
-                    # Apply MRA decomposition to expanding sample per each variable
-                    resultframeexp,resultframefull = self.ExpandingSampleCalc(self.MRADecompose, frame, minobsamount,
-                                                              entity=entity, var=var, wvltpckg=wvltpackage, levels=levels,filter=filter)
-                    self.df = pd.merge(self.df, resultframeexp,  left_index = True, right_index = True, how = 'left')
-                    self.df = pd.merge(self.df, resultframefull, left_index = True, right_index = True, how = 'left')
-                # else throw error
-                else:
-                    raise MyException("Invalid selection for argument expanding.")
-                                
+        # Apply wavelet MRA filtering using method MRADecomposition()
+        faKwargs = {'wvltpckg':wvltpackage, 'levels':levels, 'filter':filter}     
+        self.FilterApply(variables,entities,self.MRADecomposition,expanding,minobsamount,faKwargs)
+                 
     def SumVariables(self,variables,name,entities=None):
         """
         Aggregate given variables, under same entity, using simple sum.
