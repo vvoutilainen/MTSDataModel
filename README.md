@@ -13,11 +13,12 @@ conda activate my_env
 cd path/to/MTSDataModel
 conda install -y --file requirements.txt
 
-# Open Python instance, install needed R packages via rpy2
-# This still needs to be automated
+# Open Python instance
+python
 from rpy2.robjects.packages import importr
 utils = importr('utils')
 utils.install_packages('wavelets')
+quit()
 ```
 
 ## Loading data into data model

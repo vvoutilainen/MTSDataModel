@@ -95,11 +95,14 @@ class MTSDataModel:
                 # Create exapanding resultframe
                 resultframeexp  = crtresultframe[crtresultframe.index == d]
                 # Append suffix of end date reduced full variables
-                crtresultframe.columns = pd.MultiIndex.from_tuples([(x[0]+"_"+d, x[1]) for x in crtresultframe.columns])                
+                crtresultframe.columns = pd.MultiIndex.from_tuples([(x[0]+"_"+d, x[1]) for x in crtresultframe.columns])           
                 # Create reduced full resultframe with same index and columns as input frame
-                resultframefull = pd.DataFrame(index=frame.index)
+                resultframefull = pd.DataFrame(index=frame.index)                
                 # Append variables to reduced full resultframe. Thos merge throws a warning but seems to work as intended...
-                resultframefull = pd.merge(resultframefull, crtresultframe, left_index = True, right_index = True, how = 'left')                
+                resultframefull = pd.merge(resultframefull, crtresultframe, left_index = True, right_index = True, how = 'left')
+                # Force to multi-column. We get from above merge one warning but in rest of loops it dissappears thanks to this
+                resultframefull.columns = pd.MultiIndex.from_tuples([(x[0]+"_"+d, x[1]) for x in crtresultframe.columns])                
+
             else:
                 # Append last values of crtresultframe to exapanding resultframe
                 resultframeexp  = resultframeexp.append(crtresultframe[crtresultframe.index == d])
@@ -108,6 +111,7 @@ class MTSDataModel:
                 # Append variables to reduced full resultframe
                 resultframefull = pd.merge(resultframefull, crtresultframe, left_index = True, right_index = True, how = 'left')
             counter = counter + 1
+
         return resultframeexp, resultframefull
 
     @staticmethod
@@ -127,6 +131,17 @@ class MTSDataModel:
         # Modify to multi-columned
         mraseries.columns = pd.MultiIndex.from_tuples(list(zip(mraseries.columns,[entity]*len(mraseries.columns))))              
         return mraseries
+
+    @staticmethod
+    def HPFilter(frame,entity,var,lamb):
+        """
+        Function for HP filter.
+        """
+        from statsmodels.tsa.filters import hp_filter
+        frameout = pd.DataFrame({'a': hp_filter.hpfilter(frame.values, lamb)[0], 'b':hp_filter.hpfilter(frame.values, lamb)[1]})
+        frameout.index = frame.index
+        frameout.columns = pd.MultiIndex.from_tuples(list(zip([var+"_hpcy",var+"_hptr"],[entity]*len(frameout.columns))))
+        return frameout
 
     @staticmethod
     def Deflate(frame):
@@ -162,6 +177,7 @@ class MTSDataModel:
         """
         Plot given series from frame
         """
+        self.VariablesCheck(variables,entities)
         self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1).isin(entities))].plot(ax=ax)
 
     def GetVariables(self, variables, entities=None):
@@ -231,23 +247,23 @@ class MTSDataModel:
                 # If decomposition on using full sample
                 if expanding=='none':
                     # Apply MRA decomposition per each variable
-                    resultframe = self.MRADecompose(frame,**escKwargDict)
+                    resultframe = ffun(frame,**escKwargDict)
                     self.df = pd.merge(self.df, resultframe, left_index = True, right_index = True, how = 'left')
                 # If decomposition using expanding sample, storing only expanding
                 elif expanding=='expanding':
                     # Apply MRA decomposition to expanding sample per each variable
-                    resultframe,_ = self.ExpandingSampleCalc(self.MRADecompose, frame, minobsamount,escKwargDict)
+                    resultframe,_ = self.ExpandingSampleCalc(ffun, frame, minobsamount,escKwargDict)
                     self.df = pd.merge(self.df, resultframe, left_index = True, right_index = True, how = 'left')
                 # If decomposition using expanding sample, storing only reduced full samples
                 elif expanding=='redfull':
                     # Apply MRA decomposition to expanding sample per each variable
-                    _,resultframe = self.ExpandingSampleCalc(self.MRADecompose, frame, minobsamount,escKwargDict)
+                    _,resultframe = self.ExpandingSampleCalc(ffun, frame, minobsamount,escKwargDict)
                     self.df = pd.merge(self.df, resultframe, left_index = True, right_index = True, how = 'left')
 
                 # If decomposition using expanding sample, storing both expanding and reduced full samples
                 elif expanding=='both':
                     # Apply MRA decomposition to expanding sample per each variable
-                    resultframeexp,resultframefull = self.ExpandingSampleCalc(self.MRADecompose, frame, minobsamount,escKwargDict)
+                    resultframeexp,resultframefull = self.ExpandingSampleCalc(ffun, frame, minobsamount,escKwargDict)
                     self.df = pd.merge(self.df, resultframeexp,  left_index = True, right_index = True, how = 'left')
                     self.df = pd.merge(self.df, resultframefull, left_index = True, right_index = True, how = 'left')
                 # else throw error
@@ -381,9 +397,26 @@ class MTSDataModel:
         # Get R wavelet functions
         wvltpackage = self.ConstructWvltFunctions()
 
-        # Apply wavelet MRA filtering using method MRADecomposition()
+        # Apply wavelet MRA filtering using function MRADecompose
         faKwargs = {'wvltpckg':wvltpackage, 'levels':levels, 'filter':filter}     
-        self.FilterApply(variables,entities,self.MRADecomposition,expanding,minobsamount,faKwargs)
+        self.FilterApply(variables=variables, entities=entities, ffun=self.MRADecompose, expanding=expanding, minobsamount=minobsamount, faKwargs=faKwargs)
+
+    def HPFiltering(self, variables, entities=None, lamb=1600, minobsamount=40, expanding='none'):
+        """
+        For each variable/entity/sample end date combination, appends 2 new HP variables to
+        data frame: cycle (_hpcy) and trend (_hptr) .        
+        """
+        
+        # If no entities selected, get those for which all given variables exists
+        if entities == None:
+            entities = self.EntitiesDefault(variables)
+        # If entities selected, check that all variables exist for them
+        else:
+            self.VariablesCheck(variables,entities)        
+
+        # Apply wavelet MRA filtering using function self.HPFilter
+        faKwargs = {'lamb':lamb}
+        self.FilterApply(variables=variables, entities=entities, ffun=self.HPFilter, expanding=expanding, minobsamount=minobsamount, faKwargs=faKwargs)
                  
     def SumVariables(self,variables,name,entities=None):
         """
