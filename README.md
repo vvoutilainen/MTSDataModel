@@ -8,8 +8,8 @@ Using pre-existing Anaconda installation, we set up a new conda enviroment for M
 
 ```
 conda config --append envs_dirs my_custom_path
-conda create my_env python=3.6.7
-conda activate my_env
+conda create -n mts python=3.6.7
+conda activate mts
 cd path/to/MTSDataModel
 conda install -y --file requirements.txt
 
@@ -19,6 +19,9 @@ from rpy2.robjects.packages import importr
 utils = importr('utils')
 utils.install_packages('wavelets')
 quit()
+
+# Make sure we have ipykernel installed in the new environment mts
+python -m ipykernel install --user --name mts --display-name "Python (mts)"
 ```
 
 ## Loading data into data model
