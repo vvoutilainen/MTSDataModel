@@ -191,7 +191,10 @@ class MTSDataModel:
         else:
             self.VariablesCheck(variables,entities)
 
-        return self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1).isin(entities))].copy()
+        frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1).isin(entities))].copy()
+        # Unused levels must be dropped as pandas default bahaviour does not do this
+        frame.columns = frame.columns.remove_unused_levels()
+        return frame
 
     def DropVariables(self, variables, entities=None):
         """
@@ -207,6 +210,9 @@ class MTSDataModel:
 
         from itertools import product as iterprod
         self.df.drop(list(iterprod(variables, entities)), axis=1, inplace=True)
+
+        # Unused levels must be dropped as pandas default bahaviour does not do this
+        self.df.columns = self.df.columns.remove_unused_levels()        
 
     def FilterApply(self,variables,entities,ffun,expanding,minobsamount,faKwargs):
         """
@@ -417,6 +423,32 @@ class MTSDataModel:
         # Apply wavelet MRA filtering using function self.HPFilter
         faKwargs = {'lamb':lamb}
         self.FilterApply(variables=variables, entities=entities, ffun=self.HPFilter, expanding=expanding, minobsamount=minobsamount, faKwargs=faKwargs)
+
+    def ShiftVariables(self, variables, entities=None, shift = -1):
+        """
+        Lead or lag for given variables, controlled by shift (int). 
+        When shift is positive (negative), lags (leads) variable by given 
+        period amount.
+        
+        Appends de-trended series to data frame with suffix "_lead/lagN".
+        For example, "_lead2"
+        """
+        # If no entities selected, get those for which all given variables exists
+        if entities == None:
+            entities = self.EntitiesDefault(variables)
+        # If entities selected, check that all variables exist for them
+        else:
+            self.VariablesCheck(variables,entities)
+
+        # Shift selected variables, append suffix to column names
+        crt_frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1).isin(entities))].copy()
+        crt_frame.columns = crt_frame.columns.remove_unused_levels()
+        crt_frame = crt_frame.shift(periods=shift)
+        suffix = '_lag'+str(abs(shift)) if shift>=0 else '_lead'+str(abs(shift))
+        crt_frame.columns.set_levels([x+suffix for x in crt_frame.columns.levels[0]], level=0, inplace = True)
+
+        # Merge
+        self.df = pd.merge(self.df, crt_frame, left_index = True, right_index = True, how = 'left')        
                  
     def SumVariables(self,variables,name,entities=None):
         """

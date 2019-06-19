@@ -1,4 +1,8 @@
 # Release 0.2.0-alpha
+ - Added ShiftVariables().
+ - Bug fix in DropVariables() and GetVariables(): now clean column multi-index with .remove_unused_levels() to avoid unwanted behavior. 
+
+# Release 0.2.0-alpha
  - Added method HPFiltering. Needs still checks!
  - Modified DetrendVariables(): 
    - input variable difftype -> dttype
