@@ -1,4 +1,4 @@
-# Release 0.2.0-alpha
+# Release 0.2.0
  - Added ShiftVariables().
  - Bug fix in DropVariables() and GetVariables(): now clean column multi-index with .remove_unused_levels() to avoid unwanted behavior. 
 
