@@ -173,6 +173,10 @@ class MTSDataModel:
         """Return df."""
         return self.df.copy()
 
+    def ReplaceDf(self,df):
+        """Replaces df."""
+        self.df = df
+
     def PlotVariables(self, variables, entities, ax=None):
         """
         Plot given series from frame
