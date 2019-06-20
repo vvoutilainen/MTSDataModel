@@ -212,7 +212,26 @@ class MTSDataModel:
         self.df.drop(list(iterprod(variables, entities)), axis=1, inplace=True)
 
         # Unused levels must be dropped as pandas default bahaviour does not do this
-        self.df.columns = self.df.columns.remove_unused_levels()        
+        self.df.columns = self.df.columns.remove_unused_levels()
+
+    def KeepVariables(self, variables, entities=None):
+        """
+        Drop other than designated variables from frame in-place.
+        """
+        from itertools import product as iterprod
+
+        # If no entities selected, get those for which all given variables exists
+        if entities == None:
+            entities = self.EntitiesDefault(variables)
+        # If entities selected, check that all variables exist for them
+        else:
+            self.VariablesCheck(variables,entities)
+
+        all_columns = list(zip(self.df.columns.get_level_values(0), self.df.columns.get_level_values(1)))
+        keep_columns = list(iterprod(variables, entities))
+        drop_cols = [item for item in all_columns if item not in keep_columns]
+        self.df.drop(drop_cols, axis=1, inplace=True)
+        self.df.columns = self.df.columns.remove_unused_levels()
 
     def FilterApply(self,variables,entities,ffun,expanding,minobsamount,faKwargs):
         """
