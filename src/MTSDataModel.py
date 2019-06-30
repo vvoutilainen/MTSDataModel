@@ -4,7 +4,82 @@ import numpy as np
 class MyException(Exception):
     pass
 
-class MTSDataModel:
+class GenericFrame:
+    """
+    Generic class to store meta methods common to different classes.
+    """
+    def __init__(self):
+        pass
+
+    def ReturnDf(self):
+        """Return df."""
+        return self.df.copy()
+
+    def ReplaceDf(self,df):
+        """Replaces df."""
+        self.df = df
+
+    def PlotVariables(self, variables, entities, ax=None):
+        """
+        Plot given series from frame
+        """
+        self.VariablesCheck(variables,entities)
+        self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1).isin(entities))].plot(ax=ax)
+
+    def GetVariables(self, variables, entities=None):
+        """
+        Get given series from frame
+        """
+        # If no entities selected, get those for which all given variables exists
+        if entities == None:
+            entities = self.EntitiesDefault(variables)
+        # If entities selected, check that all variables exist for them
+        else:
+            self.VariablesCheck(variables,entities)
+
+        frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1).isin(entities))].copy()
+        # Unused levels must be dropped as pandas default bahaviour does not do this
+        frame.columns = frame.columns.remove_unused_levels()
+        return frame
+
+    def DropVariables(self, variables, entities=None):
+        """
+        Drop variables from frame in-place.
+        """
+
+        # If no entities selected, get those for which all given variables exists
+        if entities == None:
+            entities = self.EntitiesDefault(variables)
+        # If entities selected, check that all variables exist for them
+        else:
+            self.VariablesCheck(variables,entities)
+
+        from itertools import product as iterprod
+        self.df.drop(list(iterprod(variables, entities)), axis=1, inplace=True)
+
+        # Unused levels must be dropped as pandas default bahaviour does not do this
+        self.df.columns = self.df.columns.remove_unused_levels()
+
+    def KeepVariables(self, variables, entities=None):
+        """
+        Drop other than designated variables from frame in-place.
+        """
+        from itertools import product as iterprod
+
+        # If no entities selected, get those for which all given variables exists
+        if entities == None:
+            entities = self.EntitiesDefault(variables)
+        # If entities selected, check that all variables exist for them
+        else:
+            self.VariablesCheck(variables,entities)
+
+        all_columns = list(zip(self.df.columns.get_level_values(0), self.df.columns.get_level_values(1)))
+        keep_columns = list(iterprod(variables, entities))
+        drop_cols = [item for item in all_columns if item not in keep_columns]
+        self.df.drop(drop_cols, axis=1, inplace=True)
+        self.df.columns = self.df.columns.remove_unused_levels()        
+
+class MTSDataModel(GenericFrame):
     """
     Class for data storing and maniplations data in multi-variate
     time series format.
@@ -14,6 +89,8 @@ class MTSDataModel:
         Read in data in csv format from path filepath.
         Input colnames is a dict that dictates column names.
         """
+        super(MTSDataModel, self).__init__()
+
         # Read in data 
         self.datain = pd.read_csv(filepath)
         self.colnames = colnames
@@ -169,73 +246,6 @@ class MTSDataModel:
     ####################
     # Meta methods
     ####################
-    def ReturnDf(self):
-        """Return df."""
-        return self.df.copy()
-
-    def ReplaceDf(self,df):
-        """Replaces df."""
-        self.df = df
-
-    def PlotVariables(self, variables, entities, ax=None):
-        """
-        Plot given series from frame
-        """
-        self.VariablesCheck(variables,entities)
-        self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1).isin(entities))].plot(ax=ax)
-
-    def GetVariables(self, variables, entities=None):
-        """
-        Get given series from frame
-        """
-        # If no entities selected, get those for which all given variables exists
-        if entities == None:
-            entities = self.EntitiesDefault(variables)
-        # If entities selected, check that all variables exist for them
-        else:
-            self.VariablesCheck(variables,entities)
-
-        frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin(variables)) & (self.df.columns.get_level_values(1).isin(entities))].copy()
-        # Unused levels must be dropped as pandas default bahaviour does not do this
-        frame.columns = frame.columns.remove_unused_levels()
-        return frame
-
-    def DropVariables(self, variables, entities=None):
-        """
-        Drop variables from frame in-place.
-        """
-
-        # If no entities selected, get those for which all given variables exists
-        if entities == None:
-            entities = self.EntitiesDefault(variables)
-        # If entities selected, check that all variables exist for them
-        else:
-            self.VariablesCheck(variables,entities)
-
-        from itertools import product as iterprod
-        self.df.drop(list(iterprod(variables, entities)), axis=1, inplace=True)
-
-        # Unused levels must be dropped as pandas default bahaviour does not do this
-        self.df.columns = self.df.columns.remove_unused_levels()
-
-    def KeepVariables(self, variables, entities=None):
-        """
-        Drop other than designated variables from frame in-place.
-        """
-        from itertools import product as iterprod
-
-        # If no entities selected, get those for which all given variables exists
-        if entities == None:
-            entities = self.EntitiesDefault(variables)
-        # If entities selected, check that all variables exist for them
-        else:
-            self.VariablesCheck(variables,entities)
-
-        all_columns = list(zip(self.df.columns.get_level_values(0), self.df.columns.get_level_values(1)))
-        keep_columns = list(iterprod(variables, entities))
-        drop_cols = [item for item in all_columns if item not in keep_columns]
-        self.df.drop(drop_cols, axis=1, inplace=True)
-        self.df.columns = self.df.columns.remove_unused_levels()
 
     def FilterApply(self,variables,entities,ffun,expanding,minobsamount,faKwargs):
         """
@@ -520,4 +530,3 @@ class MTSDataModel:
             frame_red.columns = pd.MultiIndex.from_tuples(list(zip(frame_red.columns,[entity]*len(frame_red.columns))))
             frame_red.index = frame.index
             self.df = pd.merge(self.df, frame_red, left_index = True, right_index = True, how = 'left')
-            
