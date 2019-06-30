@@ -530,3 +530,177 @@ class MTSDataModel(GenericFrame):
             frame_red.columns = pd.MultiIndex.from_tuples(list(zip(frame_red.columns,[entity]*len(frame_red.columns))))
             frame_red.index = frame.index
             self.df = pd.merge(self.df, frame_red, left_index = True, right_index = True, how = 'left')
+
+
+
+
+class MTSPredModel(GenericFrame):
+    """
+    Class for performing predictive modelling tasks based on
+    class MTSDataModel object.
+    
+    Currently only supports univariate pedictive modelling cases,
+    i.e. only one endogenous series.
+    
+    Requirements:
+        a) N exogenous variables, names designated by list exogenous.
+        b) M endogenous variables, names designated by list endogenous.    
+        c) df variable names must coincide with exogenous + endogenous.
+        d) Variables must have same entities, otherwise throws an error.        
+    """
+    def __init__(self,df,exogenous,endogenous):
+        super(MTSPredModel, self).__init__()
+
+        self.df = df.copy()
+        self.exogenous = exogenous
+        self.endogenous = endogenous
+
+        # Drop other possible variables that are not in lists exogenous/endogenous
+        self.df = self.df.iloc[:, self.df.columns.get_level_values(0).isin(exogenous+endogenous) ].copy()
+        
+        # Check c)
+        if sorted(list(set(list(self.df.columns.get_level_values(0))))) != sorted(self.exogenous+self.endogenous):
+            raise MyException("MTSPredModel init: df variable names do not coincide with exogenous + endogenous!")
+            
+        # Check d)
+        def checkEqual(lst):
+            return lst[1:] == lst[:-1]
+        varcols = [sorted(list(self.df.iloc[:, self.df.columns.get_level_values(0)==var].columns.get_level_values(1))) for var in exogenous + endogenous]
+        if checkEqual(varcols) == False:
+            raise MyException("MTSPredModel init: Variables do not same entities!")
+
+        
+    def PrepareEndogenousVariable(self,y,horizonstart,horizonend,postcrisisperiods,postcrisisdroptype='dropifnotinvulnhor'):
+        """
+        Method that prepares endogenous variable under each entity to be used in
+        early-warning regressions.
+        
+        y (string)                 : name of chosen endogenous variable
+        horizonstart (int)         : how many periods before crisis date do we start vulnerability horizon
+        horizonend (int)           : how many periods before crisis date do we end vulnerability horizon
+        postcrisisperiods (int)    : amount of post-crisis periods to be dropeped; 0 for not dropping any 
+        postcrisisdroptype (string): by default 'dropifnotinvulnhor';  'drop' wil drop post-crisis periods in any case        
+
+        Makes sense only for a single endogenous variable. Thus, method removes 
+        other possible endogenous variables from frame and updates list endogenous
+        accordingly.
+
+        Intended behaviour of new mapped endogenous variable is as follows:
+         - Vulnerability horizon is mapped to specified range of periods. The mapped variable will have ones
+           in the vulnerability horizon, otherwise zeroes by default.
+         - Pre-crisis periods, i.e. falling between vulnerability horizon end and crisis start, are deleted
+           from the mapped variable. Exception to this rule: if pre-crisis period of crisis number 1 is 
+           also in vulnerability horizon of crisis 2, then these observations are kept and mapped to 1 by
+           previous rule.
+         - Amount postcrisisperiods of post-crisis periods will be deleted from mapped variable in any case
+           if postcrisisdroptype == 'drop'. Default behavior (postcrisisdroptype='dropifnotinvulnhor'), however,
+           is that if post-crisis periods of crisis number 1 are also in vulnerability horizon of crisis 
+           number 2, then these observations are not deleted but set to 1 in the mapped variable by previous
+           rule.
+         - Crisis periods trumps all other rules; these are always deleted from mapped variable.
+
+        Method replaces endegenous variable under each entity with the treated
+        endogenous variable. Deleted values appea as NaNs.
+        """
+    
+        # Check that horizonstart >= horizonend and both are ints
+        if isinstance(horizonstart, int) == False or isinstance(horizonend, int) == False or isinstance(postcrisisperiods, int) == False:
+            raise MyException("PrepareEndogenousVariable: horizonstart, horizonend, and postcrisisperiods need to be non-negative integers!")
+
+        if horizonstart < 0 or horizonend < 0:
+            raise MyException("PrepareEndogenousVariable: horizonstart and horizonend need to be non-negative integers!")
+
+        if horizonend > horizonstart:
+            raise MyException("PrepareEndogenousVariable: Need to have horizonstart >= horizonend!")
+
+        # Check that postcrisisperiods >= 0
+        if postcrisisperiods < 0:
+            raise MyException("PrepareEndogenousVariable: postcrisisperiods needs to be non-negative integer!")
+
+        # Drop any other endogenous variable.
+        endogenous = [y]
+        self.df = self.df.iloc[:, self.df.columns.get_level_values(0).isin(self.endogenous + self.exogenous) ]
+
+        # Loop over each entity
+        entities = list(np.unique(self.df.columns.get_level_values(1).values))
+        for entity in entities:            
+
+            # Select variable y under given entity into frame    
+            frame = self.df.iloc[:, (self.df.columns.get_level_values(0).isin(self.endogenous)) & (self.df.columns.get_level_values(1)==entity)].copy()
+            frame[y+'_new',entity] = 0
+
+            # First map original endogenous variable to vulnerability horizon.
+            # Handle this mapped variable as a separate series.
+            # At this point this will just mechanical mapping, without consideration
+            # that vulnerability horizon might overlap cith crisis period.
+            crisis_periods = list()
+            i = 0
+            while i < len(frame):
+            # Ugly loop to perform what we need. There's room for improvement here...
+                # If we hit a one...
+                if frame.iloc[i,0] == 1:
+                    # Fire up second loop to peek into future; see how long a series of ones
+                    for j in range (0, len(frame) - (i+1) ):
+                        # break if we hit zero; of we hit maximum for j, that is also fine
+                        if frame.iloc[i + (j+1), 0] == 0:
+                            break
+                    # Since loop control variable j is still in scope, we have its value
+                    # and j+1  tells us length of current sub-series of ones. Get indices
+                    # for current sub-series of ones.
+                    crisis_periods.append(frame.iloc[i:(i + (j+1)), 0].index.values.tolist())
+
+                    # Force i for next iteration
+                    i = i+(j+1)
+
+                # If we hit a zero, just increment i 
+                else:
+                    i+=1
+
+            # Commence with deletions from new endogenous variable
+            for el in crisis_periods:
+
+                # Map vulnerability horizons from the first dates of crisis_periods elements
+                start_row_no = np.maximum(frame.index.get_loc(el[0]) - horizonstart,0)
+                end_row_no = np.maximum(frame.index.get_loc(el[0]) - horizonend,start_row_no)
+                frame.iloc[start_row_no:(end_row_no+1),frame.columns.get_level_values(0) == y+'_new'] = 1
+
+                # Delete pre-crisis periods between vuln horizon and start of crisis period
+                frame.iloc[(end_row_no+1):frame.index.get_loc(el[0]),frame.columns.get_level_values(0) == y+'_new'] = np.nan
+
+            for el in crisis_periods:
+                # Delete post-crisis periods from the new variable, depending on delete type.
+                # Needs separate loop so that this trumps previous rules.                
+
+                # If zero selected, do not drop any post-crisis periods
+                if postcrisisperiods == 0:
+                    pass
+                elif postcrisisperiods > 0:
+
+                    start_row_no = frame.index.get_loc(el[-1]) + 1
+                    end_row_no = np.minimum((start_row_no-1) + postcrisisperiods,(len(frame)-1))            
+
+                    if postcrisisdroptype == 'drop':
+                        frame.iloc[start_row_no:(end_row_no+1),frame.columns.get_level_values(0) == y+'_new'] = np.nan
+
+                    elif postcrisisdroptype == 'dropifnotinvulnhor':
+                        for rowno in list(range(start_row_no,end_row_no+1)):
+                            # If post-crisis date is also in vulnerability horizon (of some other crisis period)
+                            if frame.iloc[rowno,frame.columns.get_level_values(0) == y+'_new'].values == 1:
+                                pass
+                            # Else we delete post-crisis values
+                            else:
+                                frame.iloc[rowno,frame.columns.get_level_values(0) == y+'_new'] = np.nan
+                    else:
+                        raise MyException("PrepareEndogenousVariable: Invalid postcrisisdates!")
+                else:
+                    raise MyException("PrepareEndogenousVariable: postcrisisperiods needs to be non-negative integer!")                
+
+            for el in crisis_periods:
+                # Delete crisis periods from the new variable.
+                # Needs separate loop so that this trumps previous rules.
+                start_row_no = frame.index.get_loc(el[0])
+                end_row_no = frame.index.get_loc(el[-1])
+                frame.iloc[start_row_no:(end_row_no+1),frame.columns.get_level_values(0) == y+'_new'] = np.nan
+
+            # Drop original endogenous variable, rename new.
+            self.df[y,entity] = frame[y+'_new',entity].copy()            
