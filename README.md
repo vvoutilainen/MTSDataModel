@@ -24,6 +24,8 @@ quit()
 python -m ipykernel install --user --name mts --display-name "Python (mts)"
 ```
 
+Last step (installing ipykernel) might create necessary files to path outside the scope of current OS user. In this case Jupyter throws error when opening kernel. Make sure you run conda promt/Anaconda/Jupyter with admin rights or make path available to current OS user.
+
 ## Loading data into data model
 
 Data is read in from a .csv file. This file needs to be in long format and contain following columns:
