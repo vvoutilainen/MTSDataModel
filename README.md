@@ -4,24 +4,10 @@ MTSDataModel is a Python class that stores and manipulates economic multivariate
 
 ## Installation
 
-Using pre-existing Anaconda installation, we set up a new conda enviroment for MTSDataModel. See tested versions of Anaconda, conda and Python in release notes. See requirements.txt for packages and their versions that will be installed.
+Conda enviroment for the use of MTSDataModel is created according to the instructions in [NoobQuant condaenv](https://github.com/NoobQuant/dsenvs/blob/main/condaenv.md). The specific installation command for *mts* environment is:
 
 ```
-conda config --append envs_dirs my_custom_path
-conda create -n mts python=3.6.7
-conda activate mts
-cd path/to/MTSDataModel
-conda install -y --file requirements.txt
-
-# Open Python instance
-python
-from rpy2.robjects.packages import importr
-utils = importr('utils')
-utils.install_packages('wavelets')
-quit()
-
-# Make sure we have ipykernel installed in the new environment mts
-python -m ipykernel install --user --name mts --display-name "Python (mts)"
+mamba create --name mts anaconda python=3.6.7 numpy=1.15.2 numpy-base=1.15.2 tzlocal=2.0.0 pandas=0.24.1 seaborn=0.11.0 rpy2==2.9.4 r=3.6.0 r-base=3.6.0 r-essentials=3.6.0 r-tidyverse=1.2.1 rtools=3.4.0 r-rjsdmx=2.1_0 r-seasonal=1.7.0 rstudio=1.1.456 r-wavelets=0.3_0.1 r-xlconnect=1.0.3
 ```
 
 ## Loading data into data model
